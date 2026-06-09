@@ -27,9 +27,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -55,17 +58,29 @@ class MainActivity : ComponentActivity() {
         LunchNotification.ensureChannel(applicationContext)
 
         setContent {
-            LunchReminderTheme {
-                LunchReminderScreen()
+            val settings = remember { ReminderSettings(applicationContext) }
+            val config by settings.configFlow.collectAsState(initial = ReminderConfig())
+
+            LunchReminderTheme(themeMode = config.themeMode) {
+                LunchReminderScreen(
+                    settings = settings,
+                    config = config,
+                )
             }
         }
     }
 }
 
 @Composable
-private fun LunchReminderTheme(content: @Composable () -> Unit) {
+private fun LunchReminderTheme(
+    themeMode: ThemeMode,
+    content: @Composable () -> Unit,
+) {
     val context = LocalContext.current
-    val darkTheme = isSystemInDarkTheme()
+    val darkTheme = ThemeUtils.shouldUseDarkTheme(
+        themeMode = themeMode,
+        systemInDarkTheme = isSystemInDarkTheme(),
+    )
     val colorScheme = when {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && darkTheme -> dynamicDarkColorScheme(context)
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> dynamicLightColorScheme(context)
@@ -80,12 +95,14 @@ private fun LunchReminderTheme(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun LunchReminderScreen() {
+private fun LunchReminderScreen(
+    settings: ReminderSettings,
+    config: ReminderConfig,
+) {
     val context = LocalContext.current
-    val settings = remember { ReminderSettings(context.applicationContext) }
     val scheduler = remember { ReminderScheduler(context.applicationContext) }
-    val config by settings.configFlow.collectAsState(initial = ReminderConfig())
     val scope = rememberCoroutineScope()
+    var showAbout by remember { mutableStateOf(false) }
 
     var hasNotificationPermission by remember { mutableStateOf(LunchNotification.canPostNotifications(context)) }
     var sendTestAfterPermission by remember { mutableStateOf(false) }
@@ -94,13 +111,18 @@ private fun LunchReminderScreen() {
     ) { granted ->
         hasNotificationPermission = granted
         if (granted && sendTestAfterPermission) {
-            LunchNotification.show(context.applicationContext)
+            LunchNotification.show(context.applicationContext, MealType.LUNCH, config)
         }
         sendTestAfterPermission = false
     }
 
     LaunchedEffect(Unit) {
         hasNotificationPermission = LunchNotification.canPostNotifications(context)
+    }
+
+    if (showAbout) {
+        AboutScreen(onBack = { showAbout = false })
+        return
     }
 
     Surface(
@@ -120,73 +142,86 @@ private fun LunchReminderScreen() {
             ) {
                 HeaderSection()
 
-                TimeCard(
-                    timeText = DateUtils.formatTime(config.reminderHour, config.reminderMinute),
-                    onClick = {
-                        TimePickerDialog(
-                            context,
-                            { _, hour, minute ->
-                                scope.launch {
-                                    settings.updateReminderTime(hour, minute)
-                                    if (config.enabled) {
-                                        scheduler.scheduleNextReminder(
-                                            config.copy(
-                                                reminderHour = hour,
-                                                reminderMinute = minute,
-                                            ),
+                MealType.entries.forEach { mealType ->
+                    MealReminderCard(
+                        mealType = mealType,
+                        timeText = DateUtils.formatTime(
+                            config.hourFor(mealType),
+                            config.minuteFor(mealType),
+                        ),
+                        enabled = config.isEnabled(mealType),
+                        todaySkipped = DateUtils.isSkippedToday(config),
+                        onTimeClick = {
+                            TimePickerDialog(
+                                context,
+                                { _, hour, minute ->
+                                    scope.launch {
+                                        settings.updateMealTime(mealType, hour, minute)
+                                        scheduler.scheduleAll(
+                                            config.withMealTime(mealType, hour, minute),
                                         )
                                     }
-                                }
-                            },
-                            config.reminderHour,
-                            config.reminderMinute,
-                            true,
-                        ).show()
-                    },
-                )
-
-                ReminderSwitchCard(
-                    enabled = config.enabled,
-                    weekdaysOnly = config.weekdaysOnly,
-                    onEnabledChange = { checked ->
-                        scope.launch {
-                            settings.updateEnabled(checked)
-                            if (checked) {
-                                scheduler.scheduleNextReminder(config.copy(enabled = true))
-                            } else {
-                                scheduler.cancelReminder()
+                                },
+                                config.hourFor(mealType),
+                                config.minuteFor(mealType),
+                                true,
+                            ).show()
+                        },
+                        onEnabledChange = { checked ->
+                            scope.launch {
+                                settings.updateMealEnabled(mealType, checked)
+                                scheduler.scheduleAll(config.withMealEnabled(mealType, checked))
                             }
-                        }
 
-                        if (
-                            checked &&
-                            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                            !hasNotificationPermission
-                        ) {
-                            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            if (
+                                checked &&
+                                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                                !hasNotificationPermission
+                            ) {
+                                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                        },
+                    )
+                }
+
+                ReminderOptionsCard(
+                    themeMode = config.themeMode,
+                    weekdaysOnly = config.weekdaysOnly,
+                    onThemeModeChange = { themeMode ->
+                        scope.launch {
+                            settings.updateThemeMode(themeMode)
                         }
                     },
                     onWeekdaysOnlyChange = { checked ->
                         scope.launch {
                             settings.updateWeekdaysOnly(checked)
                             val updatedConfig = config.copy(weekdaysOnly = checked)
-                            if (updatedConfig.enabled) {
-                                scheduler.scheduleNextReminder(updatedConfig)
-                            }
+                            scheduler.scheduleAll(updatedConfig)
+                        }
+                    },
+                )
+
+                NotificationMessagesCard(
+                    config = config,
+                    onMessagesChange = { mealType, messages ->
+                        scope.launch {
+                            settings.updateMealMessages(mealType, messages)
                         }
                     },
                 )
 
                 NextReminderCard(
                     nextReminderText = DateUtils.formatNextReminder(config),
-                    skipTodayEnabled = config.enabled && !DateUtils.isSkippedToday(config),
+                    skipTodayEnabled = DateUtils.canSkipToday(config),
+                    skipTodayText = DateUtils.skipTodayButtonText(config),
+                    todaySkipped = config.enabled && DateUtils.isSkippedToday(config),
                     onSkipToday = {
                         scope.launch {
                             val skippedConfig = config.copy(
                                 skippedDateEpochDay = DateUtils.todayEpochDay(),
                             )
                             settings.skipToday()
-                            scheduler.scheduleNextReminder(skippedConfig)
+                            scheduler.scheduleAll(skippedConfig)
                         }
                     },
                 )
@@ -205,23 +240,34 @@ private fun LunchReminderScreen() {
                 Spacer(modifier = Modifier.height(8.dp))
             }
 
-            Button(
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                onClick = {
-                    if (
-                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                        context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
-                        PackageManager.PERMISSION_GRANTED
-                    ) {
-                        sendTestAfterPermission = true
-                        permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    } else {
-                        LunchNotification.show(context.applicationContext)
-                        hasNotificationPermission = true
-                    }
-                },
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                Text("测试通知")
+                OutlinedButton(
+                    modifier = Modifier.weight(1f),
+                    onClick = { showAbout = true },
+                ) {
+                    Text("关于")
+                }
+                Button(
+                    modifier = Modifier.weight(1f),
+                    onClick = {
+                        if (
+                            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+                            PackageManager.PERMISSION_GRANTED
+                        ) {
+                            sendTestAfterPermission = true
+                            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            LunchNotification.show(context.applicationContext, MealType.LUNCH, config)
+                            hasNotificationPermission = true
+                        }
+                    },
+                ) {
+                    Text("测试通知")
+                }
             }
         }
     }
@@ -241,7 +287,7 @@ private fun HeaderSection() {
             style = MaterialTheme.typography.displayLarge,
         )
         Text(
-            text = "午饭提醒",
+            text = "三餐提醒",
             style = MaterialTheme.typography.headlineLarge,
             fontWeight = FontWeight.Bold,
         )
@@ -254,44 +300,68 @@ private fun HeaderSection() {
 }
 
 @Composable
-private fun TimeCard(
+private fun MealReminderCard(
+    mealType: MealType,
     timeText: String,
-    onClick: () -> Unit,
+    enabled: Boolean,
+    todaySkipped: Boolean,
+    onTimeClick: () -> Unit,
+    onEnabledChange: (Boolean) -> Unit,
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(CardCornerRadius),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.primaryContainer,
         ),
     ) {
-        Column(
-            modifier = Modifier.padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(
-                text = "当前提醒时间",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = timeText,
-                style = MaterialTheme.typography.displayLarge,
-                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                fontWeight = FontWeight.Bold,
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(onClick = onTimeClick),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = mealType.displayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = timeText,
+                    style = MaterialTheme.typography.displayMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    fontWeight = FontWeight.Bold,
+                )
+                if (todaySkipped) {
+                    Text(
+                        text = "今日已跳过",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(16.dp))
+            Switch(
+                checked = enabled,
+                onCheckedChange = onEnabledChange,
             )
         }
     }
 }
 
 @Composable
-private fun ReminderSwitchCard(
-    enabled: Boolean,
+private fun ReminderOptionsCard(
+    themeMode: ThemeMode,
     weekdaysOnly: Boolean,
-    onEnabledChange: (Boolean) -> Unit,
+    onThemeModeChange: (ThemeMode) -> Unit,
     onWeekdaysOnlyChange: (Boolean) -> Unit,
 ) {
     Card(
@@ -307,31 +377,35 @@ private fun ReminderSwitchCard(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    Text(
-                        text = "每日午饭提醒",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Text(
-                        text = "开启后每天到点通知你",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Spacer(modifier = Modifier.width(16.dp))
-                Switch(
-                    checked = enabled,
-                    onCheckedChange = onEnabledChange,
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "主题模式",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    ThemeMode.entries.forEach { mode ->
+                        val selected = mode == themeMode
+                        if (selected) {
+                            Button(
+                                modifier = Modifier.weight(1f),
+                                onClick = { onThemeModeChange(mode) },
+                            ) {
+                                Text(mode.label)
+                            }
+                        } else {
+                            OutlinedButton(
+                                modifier = Modifier.weight(1f),
+                                onClick = { onThemeModeChange(mode) },
+                            ) {
+                                Text(mode.label)
+                            }
+                        }
+                    }
+                }
             }
 
             Row(
@@ -365,9 +439,51 @@ private fun ReminderSwitchCard(
 }
 
 @Composable
+private fun NotificationMessagesCard(
+    config: ReminderConfig,
+    onMessagesChange: (MealType, String) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(CardCornerRadius),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        ),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text(
+                text = "通知文案",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = "每行一条，提醒时随机选择。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            MealType.entries.forEach { mealType ->
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = messagesFor(config, mealType),
+                    onValueChange = { value -> onMessagesChange(mealType, value) },
+                    label = { Text("${mealType.reminderLabel}文案") },
+                    minLines = 1,
+                    maxLines = 3,
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun NextReminderCard(
     nextReminderText: String,
     skipTodayEnabled: Boolean,
+    skipTodayText: String,
+    todaySkipped: Boolean,
     onSkipToday: () -> Unit,
 ) {
     Card(
@@ -387,18 +503,70 @@ private fun NextReminderCard(
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                 fontWeight = FontWeight.SemiBold,
             )
-            Text(
-                text = nextReminderText,
-                style = MaterialTheme.typography.headlineMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                fontWeight = FontWeight.Bold,
-            )
+            if (todaySkipped) {
+                Text(
+                    text = "今天已跳过全部提醒",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+                Text(
+                    text = "下次提醒：$nextReminderText",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    fontWeight = FontWeight.Bold,
+                )
+            } else {
+                Text(
+                    text = nextReminderText,
+                    style = MaterialTheme.typography.headlineMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
             Button(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = skipTodayEnabled,
                 onClick = onSkipToday,
             ) {
-                Text("今日不提醒")
+                Text(skipTodayText)
+            }
+        }
+    }
+}
+
+@Composable
+private fun AboutScreen(onBack: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = PagePadding, vertical = 20.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            TextButton(onClick = onBack) {
+                Text("返回")
+            }
+            Text(
+                text = "LunchReminder",
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.Bold,
+            )
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(CardCornerRadius),
+            ) {
+                Column(
+                    modifier = Modifier.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Text("版本号：1.0")
+                    Text("GitHub：https://github.com/xrhnb666-sketch/LunchReminder")
+                    Text("开发说明：一个使用 Kotlin、Jetpack Compose、Material 3、DataStore、AlarmManager 和 NotificationManager 构建的三餐提醒 App。")
+                }
             }
         }
     }
@@ -445,4 +613,12 @@ private fun PermissionCard(onRequestPermission: () -> Unit) {
 }
 
 private val PagePadding = 24.dp
-private val CardCornerRadius = 28.dp
+private val CardCornerRadius = 24.dp
+
+private fun messagesFor(config: ReminderConfig, mealType: MealType): String {
+    return when (mealType) {
+        MealType.BREAKFAST -> config.breakfastMessages
+        MealType.LUNCH -> config.lunchMessages
+        MealType.DINNER -> config.dinnerMessages
+    }
+}

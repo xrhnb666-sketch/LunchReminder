@@ -6,17 +6,38 @@ import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+data class NextReminder(
+    val mealType: MealType,
+    val dateTime: LocalDateTime,
+)
+
 object DateUtils {
     private val dateLabelFormatter = DateTimeFormatter.ofPattern("M月d日", Locale.CHINA)
 
     fun calculateNextReminder(
         config: ReminderConfig,
         now: LocalDateTime = LocalDateTime.now(),
+    ): NextReminder? {
+        return MealType.entries
+            .filter { mealType -> config.isEnabled(mealType) }
+            .map { mealType ->
+                NextReminder(
+                    mealType = mealType,
+                    dateTime = calculateNextReminder(config, mealType, now),
+                )
+            }
+            .minByOrNull { reminder -> reminder.dateTime }
+    }
+
+    fun calculateNextReminder(
+        config: ReminderConfig,
+        mealType: MealType,
+        now: LocalDateTime = LocalDateTime.now(),
     ): LocalDateTime {
         var date = now.toLocalDate()
 
         while (true) {
-            val candidate = date.atTime(config.reminderHour, config.reminderMinute)
+            val candidate = date.atTime(config.hourFor(mealType), config.minuteFor(mealType))
 
             if (
                 candidate.isAfter(now) &&
@@ -38,8 +59,39 @@ object DateUtils {
         return !isSkippedToday(config, today) && shouldRemindOnDate(config, today)
     }
 
+    fun canSkipToday(config: ReminderConfig, now: LocalDateTime = LocalDateTime.now()): Boolean {
+        return config.enabled && hasRemainingReminderToday(config, now)
+    }
+
+    fun hasRemainingReminderToday(
+        config: ReminderConfig,
+        now: LocalDateTime = LocalDateTime.now(),
+    ): Boolean {
+        val today = now.toLocalDate()
+        if (!config.enabled || isSkippedDate(config, today) || !shouldRemindOnDate(config, today)) {
+            return false
+        }
+
+        return MealType.entries.any { mealType ->
+            config.isEnabled(mealType) &&
+                today.atTime(config.hourFor(mealType), config.minuteFor(mealType)).isAfter(now)
+        }
+    }
+
     fun isSkippedToday(config: ReminderConfig, today: LocalDate = LocalDate.now()): Boolean {
         return isSkippedDate(config, today)
+    }
+
+    fun skipTodayButtonText(
+        config: ReminderConfig,
+        now: LocalDateTime = LocalDateTime.now(),
+    ): String {
+        return when {
+            !config.enabled -> "提醒已关闭"
+            isSkippedDate(config, now.toLocalDate()) -> "今日已跳过全部"
+            hasRemainingReminderToday(config, now) -> "今日跳过全部"
+            else -> "今天提醒已结束"
+        }
     }
 
     fun todayEpochDay(): Long {
@@ -53,7 +105,8 @@ object DateUtils {
     fun formatNextReminder(config: ReminderConfig, now: LocalDateTime = LocalDateTime.now()): String {
         if (!config.enabled) return "提醒已关闭"
 
-        val reminderTime = calculateNextReminder(config, now)
+        val reminder = calculateNextReminder(config, now) ?: return "提醒已关闭"
+        val reminderTime = reminder.dateTime
         val today = now.toLocalDate()
         val dayText = when (reminderTime.toLocalDate()) {
             today -> "今天"
@@ -61,7 +114,7 @@ object DateUtils {
             else -> reminderTime.format(dateLabelFormatter)
         }
 
-        return "$dayText ${formatTime(config.reminderHour, config.reminderMinute)}"
+        return "$dayText ${formatTime(reminderTime.hour, reminderTime.minute)} ${reminder.mealType.displayName}"
     }
 
     private fun isWeekday(date: LocalDate): Boolean {

@@ -12,15 +12,14 @@ import android.os.Build
 
 object LunchNotification {
     private const val CHANNEL_ID = "lunch_reminders"
-    private const val NOTIFICATION_ID = 1201
 
     fun ensureChannel(context: Context) {
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "午饭提醒",
+            "三餐提醒",
             NotificationManager.IMPORTANCE_DEFAULT,
         ).apply {
-            description = "每天到点提醒你吃午饭"
+            description = "每天到点提醒你吃饭"
         }
 
         context.getSystemService(NotificationManager::class.java)
@@ -28,26 +27,33 @@ object LunchNotification {
     }
 
     fun show(context: Context) {
+        show(context, MealType.LUNCH, ReminderConfig(lunchEnabled = true))
+    }
+
+    fun show(context: Context, mealType: MealType, config: ReminderConfig) {
         if (!canPostNotifications(context)) return
 
-        val openAppIntent = Intent(context, MainActivity::class.java)
+        val openAppIntent = Intent(context, MainActivity::class.java).apply {
+            flags = NotificationNavigation.FLAGS
+        }
         val contentIntent = PendingIntent.getActivity(
             context,
-            0,
+            NotificationNavigation.REQUEST_CODE,
             openAppIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
+        val content = NotificationMessageProvider.contentFor(config, mealType)
         val notification = Notification.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_lunch)
-            .setContentTitle("午饭提醒")
-            .setContentText("到午饭时间啦，记得好好吃饭。")
+            .setContentTitle(content.title)
+            .setContentText(content.message)
             .setContentIntent(contentIntent)
             .setAutoCancel(true)
             .build()
 
         context.getSystemService(NotificationManager::class.java)
-            .notify(NOTIFICATION_ID, notification)
+            .notify(mealType.requestCode, notification)
     }
 
     fun canPostNotifications(context: Context): Boolean {

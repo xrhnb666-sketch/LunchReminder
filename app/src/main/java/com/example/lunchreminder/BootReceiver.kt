@@ -18,9 +18,7 @@ class BootReceiver : BroadcastReceiver() {
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val config = ReminderSettings(appContext).configFlow.first()
-                if (config.enabled) {
-                    ReminderScheduler(appContext).scheduleNextReminder(config)
-                }
+                ReminderScheduler(appContext).scheduleAll(config)
             } finally {
                 pendingResult.finish()
             }
