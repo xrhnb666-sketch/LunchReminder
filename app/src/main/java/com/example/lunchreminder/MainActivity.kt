@@ -48,7 +48,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import java.time.LocalDate
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -184,7 +183,7 @@ private fun LunchReminderScreen() {
                     onSkipToday = {
                         scope.launch {
                             val skippedConfig = config.copy(
-                                skippedDateEpochDay = LocalDate.now().toEpochDay(),
+                                skippedDateEpochDay = DateUtils.todayEpochDay(),
                             )
                             settings.skipToday()
                             scheduler.scheduleNextReminder(skippedConfig)
