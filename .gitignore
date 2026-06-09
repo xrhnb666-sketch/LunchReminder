@@ -12,3 +12,21 @@
 /.externalNativeBuild
 /.cxx
 /app/build
+# Android Studio
+.idea/
+*.iml
+
+# Build
+/build/
+/app/build/
+
+# Local config
+local.properties
+
+# Generated
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Gradle cache
+.gradle/
