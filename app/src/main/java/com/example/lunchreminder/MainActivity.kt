@@ -48,9 +48,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
-import java.util.Locale
+import java.time.LocalDate
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -85,9 +83,9 @@ private fun LunchReminderTheme(content: @Composable () -> Unit) {
 @Composable
 private fun LunchReminderScreen() {
     val context = LocalContext.current
-    val preferences = remember { ReminderPreferences(context.applicationContext) }
-    val scheduler = remember { LunchAlarmScheduler(context.applicationContext) }
-    val config by preferences.configFlow.collectAsState(initial = ReminderConfig())
+    val settings = remember { ReminderSettings(context.applicationContext) }
+    val scheduler = remember { ReminderScheduler(context.applicationContext) }
+    val config by settings.configFlow.collectAsState(initial = ReminderConfig())
     val scope = rememberCoroutineScope()
 
     var hasNotificationPermission by remember { mutableStateOf(LunchNotification.canPostNotifications(context)) }
@@ -124,20 +122,25 @@ private fun LunchReminderScreen() {
                 HeaderSection()
 
                 TimeCard(
-                    timeText = formatTime(config.hour, config.minute),
+                    timeText = DateUtils.formatTime(config.reminderHour, config.reminderMinute),
                     onClick = {
                         TimePickerDialog(
                             context,
                             { _, hour, minute ->
                                 scope.launch {
-                                    preferences.setTime(hour, minute)
+                                    settings.updateReminderTime(hour, minute)
                                     if (config.enabled) {
-                                        scheduler.schedule(hour, minute)
+                                        scheduler.scheduleNextReminder(
+                                            config.copy(
+                                                reminderHour = hour,
+                                                reminderMinute = minute,
+                                            ),
+                                        )
                                     }
                                 }
                             },
-                            config.hour,
-                            config.minute,
+                            config.reminderHour,
+                            config.reminderMinute,
                             true,
                         ).show()
                     },
@@ -145,13 +148,14 @@ private fun LunchReminderScreen() {
 
                 ReminderSwitchCard(
                     enabled = config.enabled,
+                    weekdaysOnly = config.weekdaysOnly,
                     onEnabledChange = { checked ->
                         scope.launch {
-                            preferences.setEnabled(checked)
+                            settings.updateEnabled(checked)
                             if (checked) {
-                                scheduler.schedule(config.hour, config.minute)
+                                scheduler.scheduleNextReminder(config.copy(enabled = true))
                             } else {
-                                scheduler.cancel()
+                                scheduler.cancelReminder()
                             }
                         }
 
@@ -163,10 +167,29 @@ private fun LunchReminderScreen() {
                             permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                         }
                     },
+                    onWeekdaysOnlyChange = { checked ->
+                        scope.launch {
+                            settings.updateWeekdaysOnly(checked)
+                            val updatedConfig = config.copy(weekdaysOnly = checked)
+                            if (updatedConfig.enabled) {
+                                scheduler.scheduleNextReminder(updatedConfig)
+                            }
+                        }
+                    },
                 )
 
                 NextReminderCard(
-                    nextReminderText = nextReminderText(config.hour, config.minute),
+                    nextReminderText = DateUtils.formatNextReminder(config),
+                    skipTodayEnabled = config.enabled && !DateUtils.isSkippedToday(config),
+                    onSkipToday = {
+                        scope.launch {
+                            val skippedConfig = config.copy(
+                                skippedDateEpochDay = LocalDate.now().toEpochDay(),
+                            )
+                            settings.skipToday()
+                            scheduler.scheduleNextReminder(skippedConfig)
+                        }
+                    },
                 )
 
                 if (
@@ -268,7 +291,9 @@ private fun TimeCard(
 @Composable
 private fun ReminderSwitchCard(
     enabled: Boolean,
+    weekdaysOnly: Boolean,
     onEnabledChange: (Boolean) -> Unit,
+    onWeekdaysOnlyChange: (Boolean) -> Unit,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -277,39 +302,75 @@ private fun ReminderSwitchCard(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
         ),
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(20.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+            verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    text = "每日午饭提醒",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    text = "开启后每天到点通知你",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = "每日午饭提醒",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = "开启后每天到点通知你",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = onEnabledChange,
                 )
             }
-            Spacer(modifier = Modifier.width(16.dp))
-            Switch(
-                checked = enabled,
-                onCheckedChange = onEnabledChange,
-            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = "仅工作日提醒",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = "周六周日自动跳过",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Switch(
+                    checked = weekdaysOnly,
+                    onCheckedChange = onWeekdaysOnlyChange,
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun NextReminderCard(nextReminderText: String) {
+private fun NextReminderCard(
+    nextReminderText: String,
+    skipTodayEnabled: Boolean,
+    onSkipToday: () -> Unit,
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(CardCornerRadius),
@@ -333,6 +394,13 @@ private fun NextReminderCard(nextReminderText: String) {
                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                 fontWeight = FontWeight.Bold,
             )
+            Button(
+                modifier = Modifier.fillMaxWidth(),
+                enabled = skipTodayEnabled,
+                onClick = onSkipToday,
+            ) {
+                Text("今日不提醒")
+            }
         }
     }
 }
@@ -379,27 +447,3 @@ private fun PermissionCard(onRequestPermission: () -> Unit) {
 
 private val PagePadding = 24.dp
 private val CardCornerRadius = 28.dp
-
-private fun formatTime(hour: Int, minute: Int): String {
-    return String.format(Locale.CHINA, "%02d:%02d", hour, minute)
-}
-
-private fun nextReminderText(hour: Int, minute: Int): String {
-    val now = LocalDateTime.now()
-    val reminderTime = now
-        .withHour(hour)
-        .withMinute(minute)
-        .withSecond(0)
-        .withNano(0)
-        .let { time ->
-            if (time.isAfter(now)) time else time.plusDays(1)
-        }
-
-    val dayText = when (reminderTime.toLocalDate()) {
-        now.toLocalDate() -> "今天"
-        now.toLocalDate().plusDays(1) -> "明天"
-        else -> reminderTime.format(DateTimeFormatter.ofPattern("M月d日", Locale.CHINA))
-    }
-
-    return "$dayText ${formatTime(hour, minute)}"
-}
