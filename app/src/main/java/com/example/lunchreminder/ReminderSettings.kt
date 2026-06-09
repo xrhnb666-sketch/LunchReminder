@@ -79,7 +79,7 @@ data class ReminderConfig(
     }
 }
 
-private val Context.reminderDataStore by preferencesDataStore(name = "reminder_settings")
+internal val Context.reminderDataStore by preferencesDataStore(name = "reminder_settings")
 
 class ReminderSettings(private val context: Context) {
     private object Keys {
@@ -175,6 +175,12 @@ class ReminderSettings(private val context: Context) {
     suspend fun skipToday() {
         context.reminderDataStore.edit { preferences ->
             preferences[Keys.SkippedDateEpochDay] = DateUtils.todayEpochDay()
+        }
+    }
+
+    suspend fun cancelSkipToday() {
+        context.reminderDataStore.edit { preferences ->
+            preferences.remove(Keys.SkippedDateEpochDay)
         }
     }
 

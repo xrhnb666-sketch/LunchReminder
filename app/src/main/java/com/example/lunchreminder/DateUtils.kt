@@ -59,10 +59,6 @@ object DateUtils {
         return !isSkippedToday(config, today) && shouldRemindOnDate(config, today)
     }
 
-    fun canSkipToday(config: ReminderConfig, now: LocalDateTime = LocalDateTime.now()): Boolean {
-        return config.enabled && hasRemainingReminderToday(config, now)
-    }
-
     fun hasRemainingReminderToday(
         config: ReminderConfig,
         now: LocalDateTime = LocalDateTime.now(),
@@ -82,20 +78,12 @@ object DateUtils {
         return isSkippedDate(config, today)
     }
 
-    fun skipTodayButtonText(
-        config: ReminderConfig,
-        now: LocalDateTime = LocalDateTime.now(),
-    ): String {
-        return when {
-            !config.enabled -> "提醒已关闭"
-            isSkippedDate(config, now.toLocalDate()) -> "今日已跳过全部"
-            hasRemainingReminderToday(config, now) -> "今日跳过全部"
-            else -> "今天提醒已结束"
-        }
-    }
-
     fun todayEpochDay(): Long {
         return LocalDate.now().toEpochDay()
+    }
+
+    fun weekStart(date: LocalDate = LocalDate.now()): LocalDate {
+        return date.minusDays((date.dayOfWeek.value - DayOfWeek.MONDAY.value).toLong())
     }
 
     fun formatTime(hour: Int, minute: Int): String {

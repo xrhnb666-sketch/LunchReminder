@@ -26,12 +26,12 @@ object LunchNotification {
             .createNotificationChannel(channel)
     }
 
-    fun show(context: Context) {
-        show(context, MealType.LUNCH, ReminderConfig(lunchEnabled = true))
+    fun show(context: Context): NotificationContent? {
+        return show(context, MealType.LUNCH, ReminderConfig(lunchEnabled = true))
     }
 
-    fun show(context: Context, mealType: MealType, config: ReminderConfig) {
-        if (!canPostNotifications(context)) return
+    fun show(context: Context, mealType: MealType, config: ReminderConfig): NotificationContent? {
+        if (!canPostNotifications(context)) return null
 
         val openAppIntent = Intent(context, MainActivity::class.java).apply {
             flags = NotificationNavigation.FLAGS
@@ -54,6 +54,8 @@ object LunchNotification {
 
         context.getSystemService(NotificationManager::class.java)
             .notify(mealType.requestCode, notification)
+
+        return content
     }
 
     fun canPostNotifications(context: Context): Boolean {

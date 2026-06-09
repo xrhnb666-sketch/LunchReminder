@@ -180,10 +180,6 @@ class DateUtilsTest {
         )
 
         assertFalse(result)
-        assertEquals(
-            "今天提醒已结束",
-            DateUtils.skipTodayButtonText(config, LocalDateTime.of(2026, 6, 8, 19, 0)),
-        )
     }
 
     @Test
@@ -202,10 +198,6 @@ class DateUtilsTest {
         )
 
         assertFalse(result)
-        assertEquals(
-            "今日已跳过全部",
-            DateUtils.skipTodayButtonText(config, LocalDateTime.of(2026, 6, 8, 7, 0)),
-        )
     }
 
     @Test
@@ -223,20 +215,6 @@ class DateUtilsTest {
         )
 
         assertFalse(result)
-    }
-
-    @Test
-    fun skipTodayButtonText_returnsSkipAllWhenUpcomingMealExists() {
-        val config = ReminderConfig(
-            breakfastEnabled = true,
-            lunchEnabled = true,
-            dinnerEnabled = true,
-        )
-
-        assertEquals(
-            "今日跳过全部",
-            DateUtils.skipTodayButtonText(config, LocalDateTime.of(2026, 6, 8, 11, 0)),
-        )
     }
 
     @Test
@@ -276,6 +254,42 @@ class DateUtilsTest {
         assertNextReminder(
             expectedMealType = MealType.BREAKFAST,
             expectedDateTime = LocalDateTime.of(2026, 6, 8, 8, 0),
+            actual = result,
+        )
+    }
+
+    @Test
+    fun isSkippedToday_returnsTrueWhenTodayHasAlreadyBeenSkipped() {
+        val skippedDate = LocalDate.of(2026, 6, 8)
+        val config = ReminderConfig(
+            breakfastEnabled = true,
+            lunchEnabled = true,
+            dinnerEnabled = true,
+            skippedDateEpochDay = skippedDate.toEpochDay(),
+        )
+
+        assertTrue(DateUtils.isSkippedToday(config, LocalDate.of(2026, 6, 8)))
+    }
+
+    @Test
+    fun calculateNextReminder_returnsTodayReminderAfterSkipTodayIsCanceled() {
+        val skippedDate = LocalDate.of(2026, 6, 8)
+        val skippedConfig = ReminderConfig(
+            breakfastEnabled = true,
+            lunchEnabled = true,
+            dinnerEnabled = true,
+            skippedDateEpochDay = skippedDate.toEpochDay(),
+        )
+        val restoredConfig = skippedConfig.copy(skippedDateEpochDay = null)
+
+        val result = DateUtils.calculateNextReminder(
+            config = restoredConfig,
+            now = LocalDateTime.of(2026, 6, 8, 9, 0),
+        )
+
+        assertNextReminder(
+            expectedMealType = MealType.LUNCH,
+            expectedDateTime = LocalDateTime.of(2026, 6, 8, 12, 0),
             actual = result,
         )
     }
