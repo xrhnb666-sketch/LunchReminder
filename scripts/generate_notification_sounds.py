@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Generate original bundled notification sounds for res/raw."""
+
 import math
 import wave
 from pathlib import Path

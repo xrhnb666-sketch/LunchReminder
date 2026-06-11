@@ -28,7 +28,6 @@ object UiAssets {
     @DrawableRes val stats = R.drawable.nav_stats
     @DrawableRes val settings = R.drawable.nav_settings
 
-    @DrawableRes val leaf = R.drawable.decor_leaf
     @DrawableRes val flower = R.drawable.decor_flower
     @DrawableRes val smallStar = R.drawable.img_star_small
 
