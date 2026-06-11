@@ -21,6 +21,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
@@ -136,6 +139,9 @@ fun SkipTodayCard(
                 }
             }
             CuteSwitch(
+                modifier = Modifier
+                    .testTag("skip_today_switch")
+                    .semantics { contentDescription = "今日跳过开关" },
                 checked = todaySkipped,
                 onCheckedChange = onSkipTodayChange,
             )

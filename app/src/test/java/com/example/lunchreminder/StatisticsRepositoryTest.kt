@@ -109,6 +109,13 @@ class StatisticsRepositoryTest {
             zoneId = ZoneOffset.UTC,
         )
 
+        assertEquals(0, summary.todayCount)
+        assertEquals(0, summary.weekCount)
+        assertEquals(0, summary.monthCount)
+        assertEquals(0, summary.streakDays)
+        assertEquals(0, summary.breakfastCount)
+        assertEquals(0, summary.lunchCount)
+        assertEquals(0, summary.dinnerCount)
         assertEquals(0f, summary.breakfastPercent, 0.001f)
         assertEquals(0f, summary.lunchPercent, 0.001f)
         assertEquals(0f, summary.dinnerPercent, 0.001f)

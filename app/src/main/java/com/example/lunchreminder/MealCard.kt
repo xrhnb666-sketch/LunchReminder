@@ -20,6 +20,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -85,6 +88,9 @@ fun MealReminderCard(
                 )
             }
             CuteSwitch(
+                modifier = Modifier
+                    .testTag("meal_switch_${mealType.storageKey}")
+                    .semantics { contentDescription = "${mealShortName(mealType)}开关" },
                 checked = enabled,
                 onCheckedChange = onEnabledChange,
             )
