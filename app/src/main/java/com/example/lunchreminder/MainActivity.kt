@@ -8,13 +8,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -25,19 +25,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.painterResource
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
-private enum class AppTab(
-    val label: String,
-    val icon: String,
-) {
-    HOME("首页", "🏠"),
-    HISTORY("历史", "🕘"),
-    STATS("统计", "📊"),
-    SETTINGS("设置", "⚙")
-}
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -47,14 +40,55 @@ class MainActivity : ComponentActivity() {
         setContent {
             val settings = remember { ReminderSettings(applicationContext) }
             val config by settings.configFlow.collectAsState(initial = ReminderConfig())
+            var showSplash by rememberSaveable { mutableStateOf(true) }
+
+            LaunchedEffect(Unit) {
+                delay(1000)
+                showSplash = false
+            }
+            LaunchedEffect(config.notificationSound, config.customSoundUri) {
+                if (
+                    config.notificationSound == NotificationSound.CUSTOM &&
+                    !NotificationSoundResolver.isCustomSoundUsable(
+                        applicationContext,
+                        config.customSoundUri,
+                    )
+                ) {
+                    settings.updateNotificationSound(NotificationSound.DEFAULT)
+                    settings.updateCustomSoundUri(null)
+                    LunchNotification.recreateChannel(applicationContext, ReminderConfig())
+                } else {
+                    LunchNotification.ensureChannel(applicationContext, config)
+                }
+            }
 
             CuteTheme(themeMode = config.themeMode) {
-                LunchReminderApp(
-                    settings = settings,
-                    config = config,
-                )
+                if (showSplash) {
+                    FullScreenSplash()
+                } else {
+                    LunchReminderApp(
+                        settings = settings,
+                        config = config,
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun FullScreenSplash() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFFFFF9F2)),
+    ) {
+        Image(
+            painter = painterResource(id = R.drawable.splash_logo),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 
@@ -72,7 +106,7 @@ private fun LunchReminderApp(
         initial = StatisticsRepository.calculate(emptyList()),
     )
     val scope = rememberCoroutineScope()
-    var currentTab by rememberSaveable { mutableStateOf(AppTab.HOME) }
+    var currentTab by remember { mutableStateOf(AppTab.HOME) }
 
     var hasNotificationPermission by remember { mutableStateOf(LunchNotification.canPostNotifications(context)) }
     var sendTestAfterPermission by remember { mutableStateOf(false) }
@@ -85,7 +119,6 @@ private fun LunchReminderApp(
         }
         sendTestAfterPermission = false
     }
-
     LaunchedEffect(Unit) {
         hasNotificationPermission = LunchNotification.canPostNotifications(context)
     }
@@ -94,135 +127,135 @@ private fun LunchReminderApp(
         modifier = Modifier.fillMaxSize(),
         containerColor = CuteColors.Background,
         bottomBar = {
-            LunchReminderBottomBar(
+            CuteNavigationBar(
                 currentTab = currentTab,
                 onTabSelected = { tab -> currentTab = tab },
             )
         },
     ) { innerPadding ->
-        when (currentTab) {
-            AppTab.HOME -> HomeScreen(
-                modifier = Modifier.padding(innerPadding),
-                config = config,
-                hasNotificationPermission = hasNotificationPermission,
-                onMealTimeChange = { mealType, hour, minute ->
-                    scope.launch {
-                        settings.updateMealTime(mealType, hour, minute)
-                        scheduler.scheduleAll(config.withMealTime(mealType, hour, minute))
-                    }
-                },
-                onMealEnabledChange = { mealType, checked ->
-                    scope.launch {
-                        settings.updateMealEnabled(mealType, checked)
-                        scheduler.scheduleAll(config.withMealEnabled(mealType, checked))
-                    }
-                },
-                onSkipTodayChange = { checked ->
-                    scope.launch {
-                        if (checked) {
-                            val skippedConfig = config.copy(
-                                skippedDateEpochDay = DateUtils.todayEpochDay(),
-                            )
-                            settings.skipToday()
-                            scheduler.scheduleAll(skippedConfig)
-                        } else {
-                            val restoredConfig = config.copy(skippedDateEpochDay = null)
-                            settings.cancelSkipToday()
-                            scheduler.scheduleAll(restoredConfig)
+        AnimatedContent(
+            targetState = currentTab,
+            transitionSpec = { bottomTabTransition() },
+            label = "bottomTabTransition",
+        ) { tab ->
+            when (tab) {
+                AppTab.HOME -> HomeScreen(
+                    modifier = Modifier.padding(innerPadding),
+                    config = config,
+                    hasNotificationPermission = hasNotificationPermission,
+                    onMealTimeChange = { mealType, hour, minute ->
+                        scope.launch {
+                            settings.updateMealTime(mealType, hour, minute)
+                            scheduler.scheduleAll(config.withMealTime(mealType, hour, minute))
                         }
-                    }
-                },
-                onRequestPermission = {
-                    permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                },
-                onTestNotification = {
-                    if (
-                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                        context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
-                        PackageManager.PERMISSION_GRANTED
-                    ) {
-                        sendTestAfterPermission = true
+                    },
+                    onMealEnabledChange = { mealType, checked ->
+                        scope.launch {
+                            settings.updateMealEnabled(mealType, checked)
+                            scheduler.scheduleAll(config.withMealEnabled(mealType, checked))
+                        }
+                    },
+                    onSkipTodayChange = { checked ->
+                        scope.launch {
+                            if (checked) {
+                                val skippedConfig = config.copy(
+                                    skippedDateEpochDay = DateUtils.todayEpochDay(),
+                                )
+                                settings.skipToday()
+                                scheduler.scheduleAll(skippedConfig)
+                            } else {
+                                val restoredConfig = config.copy(skippedDateEpochDay = null)
+                                settings.cancelSkipToday()
+                                scheduler.scheduleAll(restoredConfig)
+                            }
+                        }
+                    },
+                    onRequestPermission = {
                         permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                    } else {
-                        LunchNotification.show(context.applicationContext, MealType.LUNCH, config)
-                        hasNotificationPermission = true
-                    }
-                },
-            )
-            AppTab.HISTORY -> HistoryScreen(
-                modifier = Modifier.padding(innerPadding),
-                records = historyRecords,
-                onClearHistory = {
-                    scope.launch { historyStore.clear() }
-                },
-            )
-            AppTab.STATS -> StatsScreen(
-                modifier = Modifier.padding(innerPadding),
-                summary = statisticsSummary,
-                records = historyRecords,
-            )
-            AppTab.SETTINGS -> SettingsScreen(
-                modifier = Modifier.padding(innerPadding),
-                config = config,
-                onThemeModeChange = { themeMode ->
-                    scope.launch {
-                        settings.updateThemeMode(themeMode)
-                    }
-                },
-                onWeekdaysOnlyChange = { checked ->
-                    scope.launch {
-                        settings.updateWeekdaysOnly(checked)
-                        scheduler.scheduleAll(config.copy(weekdaysOnly = checked))
-                    }
-                },
-                onSkipTodayChange = { checked ->
-                    scope.launch {
-                        if (checked) {
-                            val skippedConfig = config.copy(
-                                skippedDateEpochDay = DateUtils.todayEpochDay(),
-                            )
-                            settings.skipToday()
-                            scheduler.scheduleAll(skippedConfig)
+                    },
+                    onTestNotification = {
+                        if (
+                            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                            context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) !=
+                            PackageManager.PERMISSION_GRANTED
+                        ) {
+                            sendTestAfterPermission = true
+                            permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                         } else {
-                            val restoredConfig = config.copy(skippedDateEpochDay = null)
-                            settings.cancelSkipToday()
-                            scheduler.scheduleAll(restoredConfig)
+                            LunchNotification.show(context.applicationContext, MealType.LUNCH, config)
+                            hasNotificationPermission = true
                         }
-                    }
-                },
-                onMessagesChange = { mealType, messages ->
-                    scope.launch {
-                        settings.updateMealMessages(mealType, messages)
-                    }
-                },
-            )
-        }
-    }
-}
-
-@Composable
-private fun LunchReminderBottomBar(
-    currentTab: AppTab,
-    onTabSelected: (AppTab) -> Unit,
-) {
-    NavigationBar(
-        containerColor = CuteColors.NavBackground,
-        tonalElevation = 8.dp,
-    ) {
-        AppTab.entries.forEach { tab ->
-            NavigationBarItem(
-                selected = currentTab == tab,
-                onClick = { onTabSelected(tab) },
-                icon = { CuteTabIcon(icon = tab.icon, selected = currentTab == tab) },
-                label = { Text(tab.label) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = CuteColors.Orange,
-                    selectedTextColor = CuteColors.Orange,
-                    indicatorColor = CuteColors.Lunch,
-                    unselectedIconColor = CuteColors.TextSecondary,
-                    unselectedTextColor = CuteColors.TextSecondary,
-                ),
-            )
+                    },
+                )
+                AppTab.HISTORY -> HistoryScreen(
+                    modifier = Modifier.padding(innerPadding),
+                    records = historyRecords,
+                    onClearHistory = {
+                        scope.launch { historyStore.clear() }
+                    },
+                )
+                AppTab.STATS -> StatsScreen(
+                    modifier = Modifier.padding(innerPadding),
+                    summary = statisticsSummary,
+                    records = historyRecords,
+                )
+                AppTab.SETTINGS -> SettingsScreen(
+                    modifier = Modifier.padding(innerPadding),
+                    config = config,
+                    onThemeModeChange = { themeMode ->
+                        scope.launch {
+                            settings.updateThemeMode(themeMode)
+                        }
+                    },
+                    onWeekdaysOnlyChange = { checked ->
+                        scope.launch {
+                            settings.updateWeekdaysOnly(checked)
+                            scheduler.scheduleAll(config.copy(weekdaysOnly = checked))
+                        }
+                    },
+                    onSkipTodayChange = { checked ->
+                        scope.launch {
+                            if (checked) {
+                                val skippedConfig = config.copy(
+                                    skippedDateEpochDay = DateUtils.todayEpochDay(),
+                                )
+                                settings.skipToday()
+                                scheduler.scheduleAll(skippedConfig)
+                            } else {
+                                val restoredConfig = config.copy(skippedDateEpochDay = null)
+                                settings.cancelSkipToday()
+                                scheduler.scheduleAll(restoredConfig)
+                            }
+                        }
+                    },
+                    onMessagesChange = { mealType, messages ->
+                        scope.launch {
+                            settings.updateMealMessages(mealType, messages)
+                        }
+                    },
+                    onNotificationSoundChange = { notificationSound ->
+                        scope.launch {
+                            settings.updateNotificationSound(notificationSound)
+                            LunchNotification.recreateChannel(
+                                context.applicationContext,
+                                config.copy(notificationSound = notificationSound),
+                            )
+                        }
+                    },
+                    onCustomSoundSelected = { customSoundUri ->
+                        scope.launch {
+                            settings.updateCustomSoundUri(customSoundUri)
+                            LunchNotification.recreateChannel(
+                                context.applicationContext,
+                                config.copy(
+                                    notificationSound = NotificationSound.CUSTOM,
+                                    customSoundUri = customSoundUri,
+                                ),
+                            )
+                        }
+                    },
+                )
+            }
         }
     }
 }

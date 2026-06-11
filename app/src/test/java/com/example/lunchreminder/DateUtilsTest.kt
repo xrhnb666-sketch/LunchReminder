@@ -151,6 +151,96 @@ class DateUtilsTest {
     }
 
     @Test
+    fun calculateNextReminder_handlesAllMealEnableCombinations() {
+        val cases = listOf(
+            ReminderCase(
+                config = ReminderConfig(
+                    breakfastEnabled = true,
+                    lunchEnabled = true,
+                    dinnerEnabled = true,
+                ),
+                expectedMealType = MealType.BREAKFAST,
+                expectedDateTime = LocalDateTime.of(2026, 6, 8, 8, 0),
+            ),
+            ReminderCase(
+                config = ReminderConfig(breakfastEnabled = true),
+                expectedMealType = MealType.BREAKFAST,
+                expectedDateTime = LocalDateTime.of(2026, 6, 8, 8, 0),
+            ),
+            ReminderCase(
+                config = ReminderConfig(lunchEnabled = true),
+                expectedMealType = MealType.LUNCH,
+                expectedDateTime = LocalDateTime.of(2026, 6, 8, 12, 0),
+            ),
+            ReminderCase(
+                config = ReminderConfig(dinnerEnabled = true),
+                expectedMealType = MealType.DINNER,
+                expectedDateTime = LocalDateTime.of(2026, 6, 8, 18, 0),
+            ),
+            ReminderCase(
+                config = ReminderConfig(breakfastEnabled = true, lunchEnabled = true),
+                expectedMealType = MealType.BREAKFAST,
+                expectedDateTime = LocalDateTime.of(2026, 6, 8, 8, 0),
+            ),
+            ReminderCase(
+                config = ReminderConfig(breakfastEnabled = true, dinnerEnabled = true),
+                expectedMealType = MealType.BREAKFAST,
+                expectedDateTime = LocalDateTime.of(2026, 6, 8, 8, 0),
+            ),
+            ReminderCase(
+                config = ReminderConfig(lunchEnabled = true, dinnerEnabled = true),
+                expectedMealType = MealType.LUNCH,
+                expectedDateTime = LocalDateTime.of(2026, 6, 8, 12, 0),
+            ),
+        )
+
+        cases.forEach { case ->
+            val result = DateUtils.calculateNextReminder(
+                config = case.config,
+                now = LocalDateTime.of(2026, 6, 8, 7, 0),
+            )
+
+            assertNextReminder(
+                expectedMealType = case.expectedMealType,
+                expectedDateTime = case.expectedDateTime,
+                actual = result,
+            )
+        }
+    }
+
+    @Test
+    fun calculateNextReminder_handlesWeekdaysOnlyAcrossEveryDayOfWeek() {
+        val config = ReminderConfig(
+            breakfastEnabled = true,
+            lunchEnabled = true,
+            dinnerEnabled = true,
+            weekdaysOnly = true,
+        )
+        val cases = listOf(
+            LocalDate.of(2026, 6, 8) to LocalDateTime.of(2026, 6, 8, 8, 0),
+            LocalDate.of(2026, 6, 9) to LocalDateTime.of(2026, 6, 9, 8, 0),
+            LocalDate.of(2026, 6, 10) to LocalDateTime.of(2026, 6, 10, 8, 0),
+            LocalDate.of(2026, 6, 11) to LocalDateTime.of(2026, 6, 11, 8, 0),
+            LocalDate.of(2026, 6, 12) to LocalDateTime.of(2026, 6, 12, 8, 0),
+            LocalDate.of(2026, 6, 13) to LocalDateTime.of(2026, 6, 15, 8, 0),
+            LocalDate.of(2026, 6, 14) to LocalDateTime.of(2026, 6, 15, 8, 0),
+        )
+
+        cases.forEach { (date, expectedDateTime) ->
+            val result = DateUtils.calculateNextReminder(
+                config = config,
+                now = date.atTime(7, 0),
+            )
+
+            assertNextReminder(
+                expectedMealType = MealType.BREAKFAST,
+                expectedDateTime = expectedDateTime,
+                actual = result,
+            )
+        }
+    }
+
+    @Test
     fun hasRemainingReminderToday_returnsTrueWhenAnyEnabledMealIsStillUpcoming() {
         val config = ReminderConfig(
             breakfastEnabled = true,
@@ -303,4 +393,10 @@ class DateUtilsTest {
         assertEquals(expectedMealType, actual?.mealType)
         assertEquals(expectedDateTime, actual?.dateTime)
     }
+
+    private data class ReminderCase(
+        val config: ReminderConfig,
+        val expectedMealType: MealType,
+        val expectedDateTime: LocalDateTime,
+    )
 }

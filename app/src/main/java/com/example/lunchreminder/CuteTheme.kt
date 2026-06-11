@@ -16,16 +16,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.sp
 
 object CuteColors {
-    val Background = Color(0xFFFFF8EF)
+    val Background = Color(0xFFFFF9F2)
     val NavBackground = Color(0xFFFFF4E8)
     val Card = Color.White
-    val Breakfast = Color(0xFFFFF5E0)
-    val Lunch = Color(0xFFFFEAD0)
-    val Dinner = Color(0xFFE5F3E8)
-    val SkipToday = Color(0xFFF2EAFB)
+    val Breakfast = Color(0xFFFFF2DA)
+    val Lunch = Color(0xFFFFE8D1)
+    val Dinner = Color(0xFFEAF6E5)
+    val SkipToday = Color(0xFFF2EAFF)
     val TextPrimary = Color(0xFF4A332A)
     val TextSecondary = Color(0xFF9A7562)
     val Orange = Color(0xFFFF8A35)
+    val BreakfastAccent = Color(0xFFF6A437)
+    val LunchAccent = Color(0xFFF79B37)
+    val DinnerAccent = Color(0xFF6EAE67)
     val OrangeStart = Color(0xFFFFA857)
     val OrangeEnd = Color(0xFFFF7C2B)
     val SoftGray = Color(0xFFE7DED6)
@@ -36,11 +39,11 @@ object CuteColors {
 }
 
 object CuteDimens {
-    val PagePadding = 20.dp
-    val CardRadius = 24.dp
-    val CardPadding = 18.dp
-    val CardSpacing = 16.dp
-    val ButtonRadius = 50.dp
+    val PagePadding = UiConstants.Layout.PagePadding
+    val CardRadius = UiConstants.Layout.CardRadius
+    val CardPadding = UiConstants.Layout.CardPadding
+    val CardSpacing = UiConstants.Layout.CardSpacing
+    val ButtonRadius = UiConstants.Layout.ButtonRadius
 }
 
 private val cuteLightColorScheme = lightColorScheme(

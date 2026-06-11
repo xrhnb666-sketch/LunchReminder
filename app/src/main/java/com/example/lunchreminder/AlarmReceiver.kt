@@ -21,7 +21,7 @@ class AlarmReceiver : BroadcastReceiver() {
                 val config = ReminderSettings(appContext).configFlow.first()
                 if (config.isEnabled(mealType)) {
                     if (DateUtils.shouldNotifyNow(config)) {
-                        LunchNotification.ensureChannel(appContext)
+                        LunchNotification.ensureChannel(appContext, config)
                         val content = LunchNotification.show(appContext, mealType, config)
                         if (content != null) {
                             ReminderHistoryStore(appContext).addRecord(

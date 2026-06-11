@@ -27,6 +27,8 @@ data class ReminderConfig(
     val breakfastMessages: String = DEFAULT_BREAKFAST_MESSAGES,
     val lunchMessages: String = DEFAULT_LUNCH_MESSAGES,
     val dinnerMessages: String = DEFAULT_DINNER_MESSAGES,
+    val notificationSound: NotificationSound = NotificationSound.DEFAULT,
+    val customSoundUri: String? = null,
 ) {
     companion object {
         const val DEFAULT_CUSTOM_MESSAGE = "记得按时吃饭"
@@ -102,6 +104,8 @@ class ReminderSettings(private val context: Context) {
         val BreakfastMessages = stringPreferencesKey("breakfast_messages")
         val LunchMessages = stringPreferencesKey("lunch_messages")
         val DinnerMessages = stringPreferencesKey("dinner_messages")
+        val NotificationSound = stringPreferencesKey("notification_sound")
+        val CustomSoundUri = stringPreferencesKey("custom_sound_uri")
     }
 
     val configFlow: Flow<ReminderConfig> = context.reminderDataStore.data.map { preferences ->
@@ -126,6 +130,8 @@ class ReminderSettings(private val context: Context) {
             breakfastMessages = preferences[Keys.BreakfastMessages] ?: ReminderConfig.DEFAULT_BREAKFAST_MESSAGES,
             lunchMessages = preferences[Keys.LunchMessages] ?: ReminderConfig.DEFAULT_LUNCH_MESSAGES,
             dinnerMessages = preferences[Keys.DinnerMessages] ?: ReminderConfig.DEFAULT_DINNER_MESSAGES,
+            notificationSound = NotificationSound.fromStorageKey(preferences[Keys.NotificationSound]),
+            customSoundUri = preferences[Keys.CustomSoundUri],
         )
     }
 
@@ -202,6 +208,23 @@ class ReminderSettings(private val context: Context) {
                 MealType.BREAKFAST -> preferences[Keys.BreakfastMessages] = messages
                 MealType.LUNCH -> preferences[Keys.LunchMessages] = messages
                 MealType.DINNER -> preferences[Keys.DinnerMessages] = messages
+            }
+        }
+    }
+
+    suspend fun updateNotificationSound(notificationSound: NotificationSound) {
+        context.reminderDataStore.edit { preferences ->
+            preferences[Keys.NotificationSound] = notificationSound.storageKey
+        }
+    }
+
+    suspend fun updateCustomSoundUri(customSoundUri: String?) {
+        context.reminderDataStore.edit { preferences ->
+            if (customSoundUri == null) {
+                preferences.remove(Keys.CustomSoundUri)
+            } else {
+                preferences[Keys.CustomSoundUri] = customSoundUri
+                preferences[Keys.NotificationSound] = NotificationSound.CUSTOM.storageKey
             }
         }
     }

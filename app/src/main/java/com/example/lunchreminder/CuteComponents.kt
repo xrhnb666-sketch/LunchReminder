@@ -3,10 +3,16 @@ package com.example.lunchreminder
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -16,29 +22,38 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 @Composable
 fun CutePageTitle(
     title: String,
     subtitle: String? = null,
-    icon: String? = null,
+    illustrationRes: Int? = null,
+    illustrationSize: Dp = 72.dp,
     modifier: Modifier = Modifier,
 ) {
-    androidx.compose.foundation.layout.Column(
+    Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        if (icon != null) {
-            Text(text = icon, style = MaterialTheme.typography.displayMedium)
+        if (illustrationRes != null) {
+            Image(
+                painter = UiAssets.painter(illustrationRes),
+                contentDescription = null,
+                modifier = Modifier.size(illustrationSize),
+            )
         }
         Text(
             text = title,
@@ -62,11 +77,19 @@ fun CuteCard(
     containerColor: Color = CuteColors.Card,
     content: @Composable () -> Unit,
 ) {
+    val shape = RoundedCornerShape(CuteDimens.CardRadius)
     Card(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(CuteDimens.CardRadius),
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 8.dp,
+                shape = shape,
+                ambientColor = Color(0x1AD5A06C),
+                spotColor = Color(0x1AD5A06C),
+            ),
+        shape = shape,
         colors = CardDefaults.cardColors(containerColor = containerColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         content = { content() },
     )
 }
@@ -82,7 +105,11 @@ fun CuteGradientButton(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(CuteDimens.ButtonRadius))
-            .background(CuteColors.Orange)
+            .background(
+                Brush.horizontalGradient(
+                    colors = listOf(CuteColors.OrangeStart, CuteColors.OrangeEnd),
+                ),
+            )
             .clickable(onClick = onClick)
             .padding(contentPadding),
         contentAlignment = Alignment.Center,
@@ -123,8 +150,14 @@ fun CuteSwitch(
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val switchScale by animateFloatAsState(
+        targetValue = if (checked) 1.04f else 1f,
+        animationSpec = tween(UiConstants.Animation.SwitchScaleMillis),
+        label = "switchScale",
+    )
+
     Switch(
-        modifier = modifier,
+        modifier = modifier.scale(switchScale),
         checked = checked,
         onCheckedChange = onCheckedChange,
         colors = SwitchDefaults.colors(
@@ -135,15 +168,6 @@ fun CuteSwitch(
             uncheckedTrackColor = CuteColors.SoftGray,
             uncheckedBorderColor = CuteColors.SoftGray,
         ),
-    )
-}
-
-@Composable
-fun CuteTabIcon(icon: String, selected: Boolean) {
-    Text(
-        text = icon,
-        style = MaterialTheme.typography.titleMedium,
-        color = if (selected) CuteColors.Orange else CuteColors.TextSecondary,
     )
 }
 
@@ -177,11 +201,19 @@ fun mealCardColor(mealType: MealType): Color {
     }
 }
 
-fun mealEmoji(mealType: MealType): String {
+fun mealAccentColor(mealType: MealType): Color {
     return when (mealType) {
-        MealType.BREAKFAST -> "🍳"
-        MealType.LUNCH -> "🍱"
-        MealType.DINNER -> "🍜"
+        MealType.BREAKFAST -> CuteColors.BreakfastAccent
+        MealType.LUNCH -> CuteColors.LunchAccent
+        MealType.DINNER -> CuteColors.DinnerAccent
+    }
+}
+
+fun mealIconRes(mealType: MealType): Int {
+    return when (mealType) {
+        MealType.BREAKFAST -> UiAssets.breakfast
+        MealType.LUNCH -> UiAssets.lunch
+        MealType.DINNER -> UiAssets.dinner
     }
 }
 

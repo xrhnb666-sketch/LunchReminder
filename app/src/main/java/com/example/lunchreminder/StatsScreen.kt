@@ -1,6 +1,7 @@
 package com.example.lunchreminder
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,11 +20,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import java.time.Instant
@@ -44,17 +47,62 @@ fun StatsScreen(
         modifier = modifier.fillMaxSize(),
         color = CuteColors.Background,
     ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            UiAssetBackgroundSlot()
+            Image(
+                painter = UiAssets.painter(UiAssets.stars),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .alpha(0.05f),
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = CuteDimens.PagePadding, vertical = 20.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(CuteDimens.CardSpacing),
+            ) {
+                CutePageTitle(title = "统计分析", subtitle = "看看最近有没有好好吃饭")
+                if (records.isEmpty()) {
+                    EmptyStatsState()
+                } else {
+                    TodaySummaryCard(summary = summary)
+                    MealDistributionCard(summary = summary)
+                    WeeklyTrendCard(points = weeklyTrend)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyStatsState() {
+    CuteCard(containerColor = CuteColors.Card) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = CuteDimens.PagePadding, vertical = 20.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(CuteDimens.CardSpacing),
+                .fillMaxWidth()
+                .padding(horizontal = CuteDimens.CardPadding, vertical = 30.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            CutePageTitle(title = "统计分析", subtitle = "看看最近有没有好好吃饭")
-            TodaySummaryCard(summary = summary)
-            MealDistributionCard(summary = summary)
-            WeeklyTrendCard(points = weeklyTrend)
+            Text(
+                text = "暂无统计数据",
+                style = MaterialTheme.typography.headlineSmall,
+                color = CuteColors.TextPrimary,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = "继续坚持按时吃饭吧～",
+                style = MaterialTheme.typography.bodyMedium,
+                color = CuteColors.TextSecondary,
+            )
+            Image(
+                painter = UiAssets.painter(UiAssets.bear),
+                contentDescription = null,
+                modifier = Modifier.size(150.dp),
+            )
         }
     }
 }
@@ -79,7 +127,7 @@ private fun TodaySummaryCard(summary: StatisticsSummary) {
                 BigNumber(label = "今日提醒", value = "${summary.todayCount}")
                 BigNumber(label = "本周提醒", value = "${summary.weekCount}")
                 BigNumber(label = "本月提醒", value = "${summary.monthCount}")
-                BigNumber(label = "连续天数", value = "${summary.streakDays}")
+                BigNumber(label = "🔥 连续提醒天数", value = "${summary.streakDays}")
             }
         }
     }
@@ -130,9 +178,9 @@ private fun MealDistributionCard(summary: StatisticsSummary) {
                     modifier = Modifier.size(132.dp),
                 )
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    LegendRow("🍳 早餐", summary.breakfastPercent, CuteColors.Orange)
-                    LegendRow("🍱 午餐", summary.lunchPercent, CuteColors.ChartBrown)
-                    LegendRow("🍜 晚餐", summary.dinnerPercent, CuteColors.ChartGreen)
+                    LegendRow(MealType.BREAKFAST, summary.breakfastPercent, CuteColors.Orange)
+                    LegendRow(MealType.LUNCH, summary.lunchPercent, CuteColors.ChartBrown)
+                    LegendRow(MealType.DINNER, summary.dinnerPercent, CuteColors.ChartGreen)
                 }
             }
         }
@@ -186,7 +234,7 @@ private fun PieChart(
 }
 
 @Composable
-private fun LegendRow(label: String, percent: Float, color: Color) {
+private fun LegendRow(mealType: MealType, percent: Float, color: Color) {
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -200,8 +248,13 @@ private fun LegendRow(label: String, percent: Float, color: Color) {
                 drawCircle(color = color)
             }
         }
+        Image(
+            painter = UiAssets.painter(mealIconRes(mealType)),
+            contentDescription = null,
+            modifier = Modifier.size(24.dp),
+        )
         Text(
-            text = label,
+            text = mealShortName(mealType),
             style = MaterialTheme.typography.bodyMedium,
             color = CuteColors.TextPrimary,
         )
